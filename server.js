@@ -82,8 +82,9 @@ function recalcStats() {
   const totalSold = itemsArr.reduce((s, it) => s + (it.copiesSold || 0), 0);
   const copiesLeft = itemsArr.reduce((s, it) => s + (it.copiesRemaining || 0), 0);
   const gross = itemsArr.reduce((s, it) => s + ((it.copiesSold || 0) * (Number(it.price) || 0)), 0);
-  const net = Math.floor(gross * 0.7); // Roblox 30% fee
-  state.stats = { totalCopies, totalSold, copiesLeft, gross, net, revenue: net, revenueGross: gross, feePercent: 30 };
+  // User gets 30% per sale: 15 for emote (50*0.3) and 28 for 95 horn/shades (floor)
+  const net = itemsArr.reduce((s, it) => s + ((it.copiesSold || 0) * Math.floor((Number(it.price)||0)*0.3)), 0);
+  state.stats = { totalCopies, totalSold, copiesLeft, gross, net, revenue: net, revenueGross: gross, feePercent: 70, netPercent: 30 };
 }
 
 function toPublicState() {

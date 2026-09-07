@@ -140,14 +140,18 @@ function sseHeartbeat() { sseClients.forEach(c => { try { c.res.write(`: keepali
 setInterval(sseHeartbeat, 25000);
 
 function robloxHeaders(extra = {}) {
+  const skipCsrf = extra.skipCsrf === true;
+  const rest = { ...extra };
+  delete rest.skipCsrf;
   const h = {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     'User-Agent': 'NobodiesBrandLive/1.0 (polling; +https://www.roblox.com/communities/201198194)',
-    ...extra,
+    ...rest,
   };
   if (HAS_COOKIE) h['Cookie'] = `.ROBLOSECURITY=${ROBLOX_COOKIE}`;
-  if (csrfToken) h['X-CSRF-TOKEN'] = csrfToken;
+  // Never send X-CSRF-TOKEN to auth endpoints — a stale token on /v2/logout would sign the account out.
+  if (csrfToken && !skipCsrf) h['X-CSRF-TOKEN'] = csrfToken;
   return h;
 }
 let csrfToken = null;
@@ -156,13 +160,15 @@ async function ensureCsrfToken() {
   if (!HAS_COOKIE) return null;
   if (csrfToken && Date.now() - csrfFetchedAt < 300000) return csrfToken;
   try {
-    // auth.roblox.com is the canonical CSRF endpoint — POST returns x-csrf-token even on failure
-    const r = await fetch('https://auth.roblox.com/v2/logout', { method: 'POST', headers: robloxHeaders() });
+    // POST /v2/login is safe — it can never log anyone out. Do NOT use /v2/logout:
+    // after 5 minutes the cached token is re-sent and that actually signs the account out.
+    // Never send X-CSRF-TOKEN to auth endpoints.
+    const r = await fetch('https://auth.roblox.com/v2/login', { method: 'POST', headers: robloxHeaders({ skipCsrf: true }) });
     const t = r.headers.get('x-csrf-token') || r.headers.get('X-CSRF-TOKEN');
     if (t) { csrfToken = t; csrfFetchedAt = Date.now(); console.log(`[csrf] got token ${t.slice(0,8)}...`); return t; }
-  } catch (e) { console.warn(`[csrf] logout fetch failed: ${e.message}`); }
+  } catch (e) { console.warn(`[csrf] login fetch failed: ${e.message}`); }
   try {
-    const r2 = await fetch('https://www.roblox.com/home', { headers: robloxHeaders() });
+    const r2 = await fetch('https://www.roblox.com/home', { headers: robloxHeaders({ skipCsrf: true }) });
     const t2 = r2.headers.get('x-csrf-token') || r2.headers.get('X-CSRF-TOKEN');
     if (t2) { csrfToken = t2; csrfFetchedAt = Date.now(); return t2; }
   } catch {}
@@ -298,8 +304,6 @@ async function pollGroupSales() {
   await ensureCsrfToken();
   const urlsToTry = [
     `https://economy.roblox.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
-    `https://economy.roblox.com/v1/communities/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
-    `https://economy.roproxy.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
   ];
   let lastRes = null;
   let lastUrl = urlsToTry[0];
@@ -462,13 +466,41 @@ async function fetchThumbnails(assetIds) {
 // stock delta in pollInventory, they just show as "Someone".
 // ---------------------------------------------------------------------------
 const seenOwners = new Map(); // assetId -> Set of "uid-serial" keys
+const highestSerial = new Map(); // assetId -> highest serialNumber seen (resales have lower serials)
 const ownersPoll = { failures: 0, skipUntil: 0 };
+const USER_NAME_TTL_MS = 24 * 60 * 60 * 1000;
+const userNameCache = new Map(); // uid -> { name, expiresAt }
+
+async function lookupUsername(uid) {
+  const key = String(uid);
+  const cached = userNameCache.get(key);
+  if (cached && cached.expiresAt > Date.now() && cached.name) return cached.name;
+  try {
+    const r = await fetchJson(`https://users.roblox.com/v1/users/${encodeURIComponent(key)}`, { headers: robloxHeaders() });
+    if (r.ok && r.json) {
+      const name = r.json.name || r.json.displayName || null;
+      if (name) {
+        userNameCache.set(key, { name, expiresAt: Date.now() + USER_NAME_TTL_MS });
+        return name;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function parseSerial(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 async function fetchRecentOwners(assetId) {
   const cid = collectibleItemIds[assetId];
-  const tries = [
-    `https://inventory.roblox.com/v1/assets/${assetId}/owners?sortOrder=Desc&limit=10`,
-  ];
+  // v2 owners endpoints (cookie via robloxHeaders) first — they actually return usernames.
+  const tries = [];
+  if (cid) tries.push(`https://inventory.roblox.com/v2/collectible-items/${cid}/owners?limit=10&sortOrder=Desc`);
+  tries.push(`https://inventory.roblox.com/v2/assets/${assetId}/owners?limit=10&sortOrder=Desc`);
+  tries.push(`https://inventory.roblox.com/v1/assets/${assetId}/owners?sortOrder=Desc&limit=10`);
   if (cid) {
     tries.push(`https://apis.roblox.com/marketplace-items/v1/items/item/${cid}/instances?limit=10&cursor=`);
     tries.push(`https://apis.roblox.com/collectibles-item/v1/collectible-items/${cid}/instances?limit=10&cursor=`);
@@ -482,14 +514,20 @@ async function fetchRecentOwners(assetId) {
       const list = [];
       for (const e of data) {
         const owner = e.owner || e.currentOwner || {};
-        const uid = String(owner.id || owner.userId || e.userId || '');
+        const uid = String(owner.id || owner.userId || e.userId || e.ownerId || '');
         if (!uid) continue;
-        const name = owner.name || owner.username || owner.displayName || `User ${uid}`;
+        let name = owner.name || owner.username || owner.displayName || e.username || e.name || null;
+        if (!name) name = await lookupUsername(uid);
+        if (!name) name = `User ${uid}`;
+        const serialRaw = e.serialNumber ?? e.instanceId ?? e.id ?? '';
+        const pricePaid = e.pricePaid ?? e.price ?? e.recentAveragePrice ?? e.sale?.price ?? owner.pricePaid ?? null;
         list.push({
           uid,
           name,
           at: e.updated || e.created || e.purchasedAt || null,
-          serial: String(e.serialNumber ?? e.instanceId ?? e.id ?? ''),
+          serial: String(serialRaw),
+          serialNumber: parseSerial(e.serialNumber ?? serialRaw),
+          pricePaid: pricePaid == null || pricePaid === '' ? null : Number(pricePaid),
         });
       }
       if (list.length) return list;
@@ -506,10 +544,16 @@ async function pollRecentBuyers() {
       const owners = await fetchRecentOwners(assetId);
       if (!owners) continue;
       anyOk = true;
+      const item = state.items[assetId];
       if (!seenOwners.has(assetId)) {
         // first successful poll = baseline; don't flood the feed with old history
         seenOwners.set(assetId, new Set(owners.map(o => `${o.uid}-${o.serial}`)));
-        console.log(`[owners] baseline ${assetId}: ${owners.length} owners`);
+        const maxSerial = owners.reduce((m, o) => {
+          const n = o.serialNumber;
+          return n != null ? Math.max(m, n) : m;
+        }, 0);
+        highestSerial.set(assetId, maxSerial);
+        console.log(`[owners] baseline ${assetId}: ${owners.length} owners (max serial ${maxSerial})`);
         continue;
       }
       const seen = seenOwners.get(assetId);
@@ -518,12 +562,17 @@ async function pollRecentBuyers() {
         const key = `${o.uid}-${o.serial}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        const maxSeen = highestSerial.get(assetId) || 0;
+        // Resales, not new catalog sales: older serial than the highest already seen,
+        // or paid more than the item's listed price.
+        if (o.serialNumber != null && maxSeen > 0 && o.serialNumber < maxSeen) continue;
+        if (o.pricePaid != null && Number.isFinite(o.pricePaid) && item?.price != null && o.pricePaid > Number(item.price)) continue;
+        if (o.serialNumber != null && o.serialNumber > maxSeen) highestSerial.set(assetId, o.serialNumber);
         newOnes.push(o);
       }
       if (seen.size > 400) { const arr = [...seen]; arr.slice(0, 200).forEach(k => seen.delete(k)); }
       if (!newOnes.length) continue;
       newOnes.reverse(); // oldest first so the newest ends up as latestSale
-      const item = state.items[assetId];
       let handled = 0;
       for (const o of newOnes) {
         const soldAt = o.at || new Date().toISOString();
@@ -690,14 +739,8 @@ app.get('/api/events', (req,res)=>{
   console.log(`[sse] client connected ${clientId} — ${sseClients.length} total`);
   req.on('close',()=>{ sseClients=sseClients.filter(c=>c.id!==clientId); console.log(`[sse] client disconnected ${clientId}`); try{res.end();}catch{} });
 });
-// manual trigger still works but only in demo for testing — not used in public accurate mode
 app.post('/api/demo/sale', (req,res)=> {
-  if (!state.demoMode) return res.status(403).json({error:'disabled in live mode'});
-  // create one anonymous sale for testing
-  const id = UGC_ASSET_IDS[0]; const item = state.items[id];
-  const s={ id:`test-${Date.now()}`, assetId:id, itemName:item.name, buyerName:'TestBuyer', buyerId:null, price:item.price, currency:'Robux', soldAt:new Date().toISOString(), created:new Date().toISOString(), demo:true};
-  state.sales.unshift(s); state.latestSale=s; if(state.sales.length>80) state.sales.length=80;
-  state.lastUpdated=new Date().toISOString(); broadcast('state', toPublicState()); res.json({ok:true, latest:s});
+  return res.status(403).json({ error: 'disabled' });
 });
 app.use(express.static(path.join(__dirname,'public'),{ maxAge:'5m', etag:true }));
 app.get('*', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')));

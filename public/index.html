@@ -128,6 +128,20 @@
             <span class="feed-dot"></span>
           </div>
         </div>
+        <div class="sale-sound-controls">
+          <button id="sale-sound-toggle" class="sound-toggle" type="button" role="switch" aria-checked="false" aria-label="Sale sound" aria-describedby="sale-sound-status">
+            <svg class="sound-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+              <g class="sound-icon-on"><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14" /></g>
+              <path class="sound-icon-off" d="m16 9 5 6m0-6-5 6" />
+            </svg>
+            <span>Sale sound</span>
+            <span id="sale-sound-state" class="sound-state" aria-hidden="true">Off</span>
+            <span class="sound-switch" aria-hidden="true"></span>
+          </button>
+          <button id="test-sale-sound" class="sound-test" type="button" title="Preview the cha-ching without adding a sale" disabled>Test sound</button>
+          <p id="sale-sound-status" class="sound-status" role="status">Turn on for a cha-ching with each new sale.</p>
+        </div>
         <div id="feed" class="feed" aria-live="polite">
           <div class="feed-empty" id="feed-empty">
             <p class="feed-empty-title">No recent sales</p>

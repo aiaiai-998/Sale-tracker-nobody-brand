@@ -149,13 +149,39 @@ async function pollGroupSales() {
     broadcast('state', toPublicState());
     return;
   }
-  const url = `https://economy.roblox.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`;
+  const urlsToTry = [
+    `https://economy.roblox.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
+    `https://economy.roblox.com/v1/communities/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
+    `https://economy.roproxy.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
+  ];
+  let lastRes = null;
+  let lastUrl = urlsToTry[0];
   try {
-    const { ok, status, json, text } = await fetchJson(url, { headers: robloxHeaders() });
+    let ok = false, status = 0, json = null, text = '';
+    for (const u of urlsToTry) {
+      lastUrl = u;
+      const r = await fetchJson(u, { headers: robloxHeaders() });
+      lastRes = r;
+      ok = r.ok; status = r.status; json = r.json; text = r.text;
+      if (ok) break;
+      if (status === 404) continue;
+      if (status === 401 || status === 403) break;
+    }
+    // use last attempt's result
+    ok = lastRes?.ok; status = lastRes?.status; json = lastRes?.json; text = lastRes?.text;
     if (!ok) {
+      if (status === 404) {
+        if (!state.last404 || Date.now() - state.last404 > 300000) {
+          console.warn(`[poll:sales] transactions 404 on ${lastUrl} — Communities API not found, using inventory-only (stock 100% real, buyer names hidden without new API)`);
+          state.last404 = Date.now();
+        }
+        state.lastError = `transactions 404 — inventory-only mode`;
+        broadcast('state', toPublicState());
+        return;
+      }
       const msg = `transactions ${status} ${(json && (json.errors?.[0]?.message || json.errorMessage)) || text?.slice(0,180) || ''}`.trim();
       state.lastError = msg;
-      console.warn(`[poll:sales] ${msg}`);
+      console.warn(`[poll:sales] ${msg} (${lastUrl})`);
       if (status === 401 || status === 403) state.live = false;
       broadcast('state', toPublicState());
       return;

@@ -276,21 +276,26 @@ async function pollInventory() {
       const prevSold = item.copiesSold;
       const prevTotal = item.totalCopies;
 
-      // ACCURATE MODE: always trust Roblox numbers (public, no faking)
+      // Known totals as per creator: 3000 each (override wrong Sales+Remaining calc)
+      const KNOWN_TOTALS = { '137910150798027': 3000, '129297459934395': 3000, '121581072690400': 3000 };
+      const knownTotal = KNOWN_TOTALS[assetId] || null;
+
+      // ACCURATE: Use real 3000 total + real remaining to compute real sold = total - remaining
+      // This fixes the 0% bug where Sales was 0 and we did 0+2845=2845 total (0% sold) instead of 3000 total (5% sold)
       if (remaining != null && Number.isFinite(Number(remaining))) {
         remaining = Number(remaining);
-        if (sales != null && Number.isFinite(Number(sales))) {
-          const s = Number(sales); const t = s + remaining;
-          if (t>0 && t!==item.totalCopies) { item.totalCopies=t; didUpdate=true; }
-          if (s!==item.copiesSold) { item.copiesSold=s; didUpdate=true; }
-          if (remaining!==item.copiesRemaining) { item.copiesRemaining=remaining; didUpdate=true; }
-        } else {
-          if (remaining!==item.copiesRemaining) { item.copiesRemaining=remaining; didUpdate=true; }
-          const inferredSold = Math.max(0, item.totalCopies - remaining);
-          if (inferredSold!==item.copiesSold) { item.copiesSold=inferredSold; didUpdate=true; }
-        }
+        let trueTotal = null;
+        if (knownTotal) trueTotal = knownTotal;
+        else if (total != null && Number.isFinite(Number(total))) trueTotal = Number(total);
+        else if (sales != null && Number.isFinite(Number(sales))) trueTotal = Number(sales) + remaining;
+        else trueTotal = item.totalCopies;
+
+        const trueSold = Math.max(0, trueTotal - remaining);
+        if (trueTotal !== item.totalCopies) { item.totalCopies = trueTotal; didUpdate = true; }
+        if (trueSold !== item.copiesSold) { item.copiesSold = trueSold; didUpdate = true; }
+        if (remaining !== item.copiesRemaining) { item.copiesRemaining = remaining; didUpdate = true; }
       } else if (total != null && Number.isFinite(Number(total))) {
-        const t=Number(total); if(t!==item.totalCopies){ item.totalCopies=t; didUpdate=true; }
+        const t = Number(total); if (t !== item.totalCopies) { item.totalCopies = t; didUpdate = true; }
       }
 
       if (didUpdate) {

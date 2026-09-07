@@ -94,14 +94,13 @@ body{
 .header-left{ display:flex; align-items:center; gap:14px; min-width:0 }
 .brand-mark{
   width:48px; height:48px; flex:0 0 48px;
-  display:grid; place-items:center;
   border-radius: 14px;
-  background: linear-gradient(135deg, #fff 0%, #e9e7ff 100%);
-  color:#0a0a0f;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  font-size: 16px;
-  box-shadow: 0 8px 20px rgba(255,255,255,0.25);
+  object-fit: cover;
+  object-position: center;
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+  background: #0c0c0f;
+  display:block;
 }
 .brand-text{ min-width:0 }
 .brand-text h1{

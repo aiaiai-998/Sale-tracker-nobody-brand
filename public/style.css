@@ -270,17 +270,12 @@ body{
 .feed::-webkit-scrollbar{ width:6px }
 .feed::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.14); border-radius:999px }
 .feed-empty{
-  flex:1; display:grid; place-items:center; gap:10px;
+  flex:1; display:grid; place-items:center; gap:6px;
   padding: 36px 16px; text-align:center; color: var(--muted);
   border:1px dashed rgba(255,255,255,0.12); border-radius: 16px; background: rgba(255,255,255,0.03);
 }
-.spinner{
-  width:22px; height:22px; border-radius:50%;
-  border:2px solid rgba(255,255,255,0.18);
-  border-top-color: #fff;
-  animation: spin 0.9s linear infinite;
-}
-@keyframes spin{ to{ transform: rotate(360deg) } }
+.feed-empty-title{ margin:0; font-size:14px; font-weight:700; letter-spacing:-0.02em; color:#fff }
+.feed-empty-sub{ margin:0; font-size:12px; color: var(--faint); max-width: 240px; line-height:1.4 }
 
 .feed-item{
   display:grid; grid-template-columns: 44px 1fr auto; gap:10px;

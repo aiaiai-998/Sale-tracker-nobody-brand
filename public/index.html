@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Nobody’s Brand — Limited UGC Live</title>
+  <meta name="description" content="Nobody's Brand Limited UGC live sales tracker — transparent glass overlay for OBS. Group 201198194" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- Transparent canvas — OBS Browser Source should set background transparent -->
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="bg-grid"></div>
+
+  <main class="stage">
+    <!-- Header -->
+    <header class="glass header">
+      <div class="header-left">
+        <div class="brand-mark">NB</div>
+        <div class="brand-text">
+          <h1>Nobody’s Brand Limited UGC Live</h1>
+          <p class="subtitle">
+            <a id="group-link" href="https://www.roblox.com/communities/201198194/Nobody-s-Brand#!/about" target="_blank" rel="noopener">Group 201198194</a>
+            <span class="dot-sep">•</span>
+            <span id="poll-note" class="poll-note">Near-live polling • Sales ~7s • Stock ~30s</span>
+          </p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="live-pill" id="live-pill" title="Connection status">
+          <span class="live-dot"></span>
+          <span id="live-text">CONNECTING</span>
+        </div>
+        <div class="header-stats">
+          <div class="h-stat">
+            <span class="h-stat-k">All copies sold so far</span>
+            <span class="h-stat-v" id="stat-sold">—</span>
+          </div>
+          <div class="h-stat">
+            <span class="h-stat-k">Copies left</span>
+            <span class="h-stat-v" id="stat-left">—</span>
+          </div>
+          <div class="h-stat">
+            <span class="h-stat-k">Total copies</span>
+            <span class="h-stat-v" id="stat-total">—</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="columns">
+      <!-- Left: latest + items -->
+      <section class="stack left-col">
+        <!-- Latest sale — hero card -->
+        <div class="glass hero" id="hero-card">
+          <div class="hero-eyebrow">
+            <span class="eyebrow-label">Latest item sold</span>
+            <span class="eyebrow-live" id="latest-time">—</span>
+            <span class="demo-badge hidden" id="demo-badge">DEMO</span>
+          </div>
+          <div class="hero-body">
+            <div class="hero-thumb-wrap">
+              <img id="latest-thumb" alt="" class="hero-thumb hidden" />
+              <div id="latest-thumb-ph" class="hero-thumb-ph">NB</div>
+            </div>
+            <div class="hero-copy">
+              <div id="latest-empty" class="hero-empty">Waiting for the next sale…</div>
+              <div id="latest-content" class="hidden">
+                <div id="latest-item" class="hero-item">—</div>
+                <div class="hero-meta">
+                  <span id="latest-buyer" class="hero-buyer">—</span>
+                  <span class="dot-sep">•</span>
+                  <span id="latest-price" class="hero-price">—</span>
+                </div>
+              </div>
+            </div>
+            <div class="hero-flash" id="hero-flash"></div>
+          </div>
+        </div>
+
+        <!-- Items grid -->
+        <div class="glass panel">
+          <div class="panel-head">
+            <h2>Limited stock</h2>
+            <span class="panel-hint" id="inventory-hint">Live counts update ~every 30s</span>
+          </div>
+          <div id="items-grid" class="items-grid">
+            <!-- injected by JS -->
+          </div>
+          <div class="panel-foot">
+            <span id="last-updated">Last updated —</span>
+            <span class="dot-sep">•</span>
+            <span id="mode-label">—</span>
+          </div>
+        </div>
+
+        <div class="glass footnote">
+          <p><strong>OBS tip:</strong> Add as Browser Source → URL <code>https://your-render-url.onrender.com</code> → Width 1280 / Height 720 → check <em>Transparent background</em> → FPS 30. No cookie is ever sent to the browser.</p>
+          <p class="muted">Roblox has no instant webhook — this overlay polls fast and safely. “Demo” means no private cookie is set on the server.</p>
+        </div>
+      </section>
+
+      <!-- Right: live feed -->
+      <section class="glass panel feed-panel">
+        <div class="panel-head">
+          <h2>Live sales feed</h2>
+          <div class="feed-controls">
+            <span id="feed-count" class="feed-count">0 sales</span>
+            <span class="feed-dot"></span>
+          </div>
+        </div>
+        <div id="feed" class="feed" aria-live="polite">
+          <div class="feed-empty" id="feed-empty">
+            <div class="spinner"></div>
+            <p>Listening for sales…</p>
+          </div>
+        </div>
+        <div class="feed-foot">
+          <span id="feed-status">Connecting via Server-Sent Events…</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Density toggle for OBS: press D -->
+  <div class="obs-hud hidden" id="obs-hud">Compact mode</div>
+
+  <script src="./script.js" type="module"></script>
+</body>
+</html>

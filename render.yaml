@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: nobodies-brand-live-sales
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: ROBLOX_GROUP_ID
+        value: 201198194
+      - key: UGC_ASSET_IDS
+        value: 137910150798027,129297459934395,121581072690400
+      - key: POLL_INTERVAL_MS
+        value: 7000
+      - key: INVENTORY_POLL_INTERVAL_MS
+        value: 30000
+      - key: ROBLOX_COOKIE
+        sync: false
+      - key: NODE_VERSION
+        value: 22.22.3

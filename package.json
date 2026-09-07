@@ -1,0 +1,30 @@
+{
+  "name": "nobodies-brand-live-sales",
+  "version": "1.0.0",
+  "description": "Roblox Limited UGC live sales tracker and transparent glass-style stream overlay for Nobody's Brand — Group 201198194",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "roblox",
+    "ugc",
+    "limited",
+    "overlay",
+    "obs",
+    "glassmorphism",
+    "sse"
+  ],
+  "author": "Nobody's Brand",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

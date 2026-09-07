@@ -362,6 +362,7 @@ body{
 .feed-item-buyer strong{ color:#fff; font-weight:600 }
 .feed-meta{ text-align:right; display:flex; flex-direction:column; gap:3px; align-items:flex-end; min-width: 84px }
 .feed-price{ font-family:"JetBrains Mono", monospace; font-size:12px; font-weight:700; color:#fff; background: rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.12); padding:4px 7px; border-radius:999px }
+.feed-qty{ display:inline-block; margin-left:6px; font-family:"JetBrains Mono", monospace; font-size:10px; font-weight:800; color:#062012; background:var(--green); padding:1px 6px; border-radius:999px; vertical-align:1px; letter-spacing:0.02em }
 .feed-time{ font-family:"JetBrains Mono", monospace; font-size:10.5px; color: var(--faint); letter-spacing:0.02em }
 
 .feed-count{

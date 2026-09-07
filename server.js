@@ -438,11 +438,14 @@ async function pollInventory() {
     state.sales.sort((a,b)=> new Date(b.soldAt)-new Date(a.soldAt));
     if (!state.latestSale && state.sales[0]) state.latestSale = state.sales[0];
     state.lastUpdated = new Date().toISOString();
+    state.live = true; // inventory succeeded — overlay is live even without group transactions
     broadcast('state', toPublicState());
     broadcast('inventory', { items:Object.values(state.items) });
     console.log(`[poll:inventory] ${Object.values(state.items).map(i=> `${i.name}: ${i.copiesSold}/${i.totalCopies} (${i.progress}%)`).join(' | ')}`);
   } else {
     state.lastUpdated = new Date().toISOString();
+    // even if nothing changed, a successful poll means we're live
+    if (state.lastInventoryAt) state.live = true;
   }
   // No fake background progress in public mode — only real sales move bars
 }

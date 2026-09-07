@@ -241,8 +241,8 @@ function renderMeta(state) {
   els.inventoryHint.textContent = `Live counts update ~every ${Math.round((state.inventoryPollIntervalMs || 30000)/1000)}s`;
   els.pollNote.textContent = `Near-live polling • Sales ~${Math.round((state.pollIntervalMs||7000)/1000)}s • Stock ~${Math.round((state.inventoryPollIntervalMs||30000)/1000)}s`;
 
-  if (state.demoMode) setLivePill('demo');
-  else if (state.live) setLivePill('live');
+  if (state.live) setLivePill('live');
+  else if (state.demoMode) setLivePill('demo');
   else setLivePill('connecting');
 }
 

@@ -426,35 +426,6 @@ async function pollInventory() {
       }
 
       if (didUpdate) {
-        const oldSold = prevSold;
-        const newSold = item.copiesSold;
-        // If real sales increased, create an ANONYMOUS sale entry (no fake buyer) — accurate, not spam
-        if (newSold > oldSold && oldSold !== 0 || (prevTotal === 200 && newSold > 0)) {
-          // first boot: don't flood with old sales, only new increments after boot
-          // but if we just learned the true count (e.g., 1 sold), we don't fake history
-          // Only create entries for *new* increments detected after we have a baseline
-          if (state.lastInventoryAt && prevTotal !== 200) {
-            for (let i=0;i< (newSold - oldSold); i++) {
-              const anonSale = {
-                id: `public-${assetId}-${Date.now()}-${i}-${newSold}`,
-                assetId,
-                itemName: item.name,
-                buyerName: HAS_COOKIE ? 'Unknown' : 'Anonymous',
-                buyerId: null,
-                price: item.price,
-                currency: 'Robux',
-                soldAt: new Date().toISOString(),
-                created: new Date().toISOString(),
-                demo: false,
-                anon: true,
-              };
-              state.sales.unshift(anonSale);
-              if (state.sales.length>80) state.sales.length=80;
-            }
-            state.latestSale = state.sales[0];
-            console.log(`[inventory] ${item.name} +${newSold-oldSold} sale(s) detected (public) — ${newSold}/${item.totalCopies}`);
-          }
-        }
         item.progress = item.totalCopies>0 ? Math.round((item.copiesSold/item.totalCopies)*100) : 0;
         item.updatedAt = new Date().toISOString();
         changed=true;

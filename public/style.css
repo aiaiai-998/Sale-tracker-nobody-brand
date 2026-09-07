@@ -379,6 +379,49 @@ body{
 .feed-foot{ font-family:"JetBrains Mono", monospace; font-size:11px; color: var(--faint) }
 .feed-controls{ display:flex; align-items:center; gap:8px }
 
+/* Sale sound — opt-in, persistent, and keyboard accessible */
+.sale-sound-controls{
+  display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:center;
+  gap:8px 12px; padding:10px 12px; border-radius:14px;
+  background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08);
+}
+.sound-toggle, .sound-test{
+  font:inherit; font-size:12px; color:var(--muted); cursor:pointer;
+  border-radius:8px; min-height:36px;
+}
+.sound-toggle{
+  display:flex; align-items:center; gap:8px; min-width:0;
+  padding:4px 0; background:none; border:0; text-align:left; white-space:nowrap;
+}
+.sound-icon{ flex:0 0 18px }
+.sound-state{ margin-left:auto; font-family:"JetBrains Mono", monospace; font-size:10px; text-transform:uppercase }
+.sound-switch{
+  width:28px; height:16px; flex:0 0 28px; padding:2px; border-radius:999px;
+  background:rgba(255,255,255,0.16); transition:background 0.15s ease;
+}
+.sound-switch::after{
+  content:""; display:block; width:12px; height:12px; border-radius:50%;
+  background:var(--muted); transition:transform 0.15s ease;
+}
+.sound-toggle[aria-checked="true"]{ color:#a7f3d0 }
+.sound-toggle[aria-checked="true"] .sound-switch{ background:rgba(34,197,94,0.35) }
+.sound-toggle[aria-checked="true"] .sound-switch::after{ transform:translateX(12px); background:#a7f3d0 }
+.sound-toggle[aria-checked="false"] .sound-icon-on,
+.sound-toggle[aria-checked="true"] .sound-icon-off{ display:none }
+.sound-test{ padding:6px 10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); white-space:nowrap }
+.sound-toggle:hover:not(:disabled), .sound-test:hover:not(:disabled){ color:#fff }
+.sound-test:hover:not(:disabled){ background:rgba(255,255,255,0.12) }
+.sound-toggle:focus-visible, .sound-test:focus-visible{ outline:2px solid var(--accent-2); outline-offset:4px }
+.sound-toggle:disabled, .sound-test:disabled{ opacity:0.45; cursor:not-allowed }
+.sound-status{ grid-column:1 / -1; margin:0; font-size:11px; line-height:1.45; color:var(--muted) }
+@media (max-width:360px){
+  .sale-sound-controls{ grid-template-columns:1fr }
+  .sound-test{ justify-self:start }
+}
+@media (prefers-reduced-motion:reduce){
+  .sound-switch, .sound-switch::after{ transition:none }
+}
+
 /* Footnote */
 .footnote{
   padding: 12px 14px;

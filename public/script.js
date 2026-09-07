@@ -2,6 +2,8 @@
 // SSE: /api/events  |  State: /api/state
 // No Roblox cookie here — ever.
 
+import { createSaleObserver, createSaleSound } from './sale-sound.mjs';
+
 const els = {
   livePill: document.getElementById('live-pill'),
   liveText: document.getElementById('live-text'),
@@ -34,6 +36,10 @@ const els = {
   inventoryHint: document.getElementById('inventory-hint'),
   groupLink: document.getElementById('group-link'),
   pollNote: document.getElementById('poll-note'),
+  soundToggle: document.getElementById('sale-sound-toggle'),
+  soundState: document.getElementById('sale-sound-state'),
+  soundTest: document.getElementById('test-sale-sound'),
+  soundStatus: document.getElementById('sale-sound-status'),
 };
 
 let lastState = null;
@@ -42,6 +48,41 @@ let reconnectTimer = null;
 let timeAgoTimer = null;
 let displayedRevenue = null;
 let lastFlashedSaleId = null;
+
+const saleSound = createSaleSound({ onChange: renderSoundControls });
+const observeSales = createSaleObserver(count => saleSound.play(count));
+
+function renderSoundControls({ enabled, supported, ready, failed }) {
+  els.soundToggle.setAttribute('aria-checked', String(enabled));
+  els.soundToggle.disabled = !supported;
+  els.soundState.textContent = enabled ? 'On' : 'Off';
+  els.soundTest.disabled = !supported || !enabled;
+  els.soundStatus.textContent = !supported
+    ? 'Audio is not supported in this browser. Sales will still update.'
+    : !enabled
+      ? 'Turn on for a cha-ching with each new sale.'
+      : failed
+        ? 'Audio could not start. Click Test sound to try again.'
+        : ready
+          ? 'Cha-ching on each new sale. Turn off anytime.'
+          : 'Sound is on — click Test sound to activate audio for this visit.';
+}
+
+function initSoundControls() {
+  els.soundToggle.addEventListener('click', () => {
+    void saleSound.setEnabled(!saleSound.getState().enabled);
+  });
+  els.soundTest.addEventListener('click', () => { void saleSound.preview(); });
+
+  // A remembered "On" setting may still need a gesture after a reload (browser
+  // autoplay policy). Any interaction can unlock it, without replaying old sales.
+  const unlock = () => {
+    const { enabled, ready } = saleSound.getState();
+    if (enabled && !ready) void saleSound.unlock();
+  };
+  document.addEventListener('pointerdown', unlock);
+  document.addEventListener('keydown', unlock);
+}
 
 function fmtTimeAgo(iso) {
   if (!iso) return '—';
@@ -300,6 +341,9 @@ function renderMeta(state) {
 }
 
 function render(state) {
+  // Observe snapshots from both SSE and fallback polling, even while muted.
+  // Never use revenue changes or render animations as a sale notification.
+  observeSales(state);
   lastState = state;
   renderStats(state);
   renderLatest(state);
@@ -361,6 +405,8 @@ function connectSSE() {
   });
 
   sse.addEventListener('sales', (e) => {
+    // The preceding state already notified new IDs. This count can also include
+    // buyer-name upgrades, so it must not trigger additional sounds.
     try {
       const d = JSON.parse(e.data);
       console.log('[sse] sales batch', d);
@@ -415,6 +461,7 @@ function initCompact() {
 // Boot
 (async function boot(){
   initCompact();
+  initSoundControls();
   setLivePill('connecting');
   await fetchStateOnce();
   connectSSE();

@@ -18,6 +18,7 @@
 - **Limited stock** cards — one per UGC asset, each with item name, copies sold, total copies, copies remaining, price, and animated progress bar
 - Near-live polling (Roblox has no instant webhooks) — **sales + stock polled every 5–10s, so the feed moves at the same time as the Robux total**
 - Real-time browser updates via **Server-Sent Events (SSE)** — no refresh needed
+- Optional **Shopify-style cha-ching sale sound** with a remembered **On / Off** switch and **Test sound** button
 - **Transparent background** — looks perfect as an **OBS Browser Source**
 
 ---
@@ -96,6 +97,28 @@ Never put `ROBLOX_COOKIE` in frontend code, in git, or in `public/*`.
 
 ---
 
+## Sale sound notifications
+
+In the **Live sales feed**, turn **Sale sound** on to hear a short, cash-register-style **cha-ching** for each newly detected sale. Turning it on plays a preview; **Test sound** lets you hear it again without adding a fake sale or changing any totals.
+
+- Sound starts **off** and your On / Off preference is remembered in this browser (when local storage is available).
+- Turning it **off** immediately silences the current chime and clears queued sounds.
+- Existing sales on initial load are silent. Repeated updates, reconnects with the same sales, and buyer-name upgrades do not play duplicate alerts. New copies in a batch play one after another, including the feed's **×N** stock entries.
+- Browsers may require a click to allow audio after a refresh, even when the saved setting is On. Click **Test sound** (or interact with the page) if the status asks you to activate audio. Sales received while muted or audio-blocked are not replayed later.
+- Keep the tracker open for notifications; they follow the existing near-live sale detection, not an instant Roblox webhook. The chime is synthesized locally with Web Audio, so there is no third-party sound download.
+
+**OBS:** Right-click the Browser Source → **Interact**, then enable **Sale sound**. Browser and OBS sound preferences are separate. If needed, enable **Control audio via OBS** in the source properties and make sure the source is unmuted in the Audio Mixer. Use **Test sound** to verify your output/monitoring setup.
+
+### Tests
+
+```bash
+npm test
+```
+
+The dependency-free tests cover new-sale detection, duplicate suppression, bulk quantities, saved preferences, muting, audio queueing, autoplay restrictions, and audio/storage failures.
+
+---
+
 ## Deploy to Render (free)
 
 This repo is ready for [Render](https://render.com) free hosting:
@@ -137,7 +160,10 @@ ROBLOX_COOKIE=<paste private .ROBLOSECURITY here — never commit it>
 ├── public/
 │   ├── index.html         # transparent glass overlay
 │   ├── style.css          # glassmorphism + OBS-friendly
-│   └── script.js          # SSE client, no refresh
+│   ├── script.js          # SSE client, no refresh + sound controls
+│   └── sale-sound.mjs     # local cha-ching synthesis + deduplicated notifications
+├── test/
+│   └── sale-sound.test.mjs # notification and audio behavior tests
 └── README.md
 ```
 

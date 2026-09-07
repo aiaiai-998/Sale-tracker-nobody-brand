@@ -10,6 +10,9 @@ const els = {
   statTotal: document.getElementById('stat-total'),
   revenueNet: document.getElementById('revenue-net'),
   revenueGross: document.getElementById('revenue-gross'),
+  boardFiery: document.getElementById('board-fiery'),
+  boardEmote: document.getElementById('board-emote'),
+  boardClock: document.getElementById('board-clock'),
   latestEmpty: document.getElementById('latest-empty'),
   latestContent: document.getElementById('latest-content'),
   latestItem: document.getElementById('latest-item'),
@@ -84,10 +87,22 @@ function renderStats(state) {
   els.statSold.textContent = Number(totalSold).toLocaleString();
   els.statLeft.textContent = Number(copiesLeft).toLocaleString();
   els.statTotal.textContent = Number(totalCopies).toLocaleString();
-  // Revenue — after 30% fee, per-item prices (50 for emote, 95 for others)
+  // Revenue — after 30% fee, per-item prices (50 for emote, 95 for others) — same size, cooler board
   const netVal = Number(net ?? state.stats?.revenue ?? 0);
   const grossVal = Number(gross ?? state.stats?.revenueGross ?? 0);
   if (els.revenueGross) els.revenueGross.textContent = grossVal.toLocaleString();
+  // compact per-item leaderboard (same card, no extra height)
+  try {
+    const items = state.items || [];
+    const find = (id) => items.find(i => String(i.assetId) === id);
+    const fiery = find('137910150798027');
+    const emote = find('129297459934395');
+    const shade = find('121581072690400');
+    const fmt = (it) => it ? (Math.floor((Number(it.price)||0)*0.3) * (it.copiesSold||0)).toLocaleString() : '0';
+    if (els.boardFiery) els.boardFiery.textContent = `Fiery ${fmt(fiery)}`;
+    if (els.boardEmote) els.boardEmote.textContent = `Emote ${fmt(emote)}`;
+    if (els.boardClock) els.boardClock.textContent = `Shade ${fmt(shade)}`;
+  } catch {}
   if (els.revenueNet) {
     if (displayedRevenue === null) {
       // first paint — no animation

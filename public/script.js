@@ -61,14 +61,14 @@ function escapeHtml(s) {
 }
 
 function setLivePill(mode) {
-  // mode: 'live' | 'demo' | 'connecting' | 'offline'
+  // mode: 'live' | 'demo' | 'connecting' | 'offline' — demo now means public accurate (no fake)
   els.livePill.classList.remove('live','demo');
   if (mode === 'live') {
     els.livePill.classList.add('live');
     els.liveText.textContent = 'LIVE';
   } else if (mode === 'demo') {
     els.livePill.classList.add('demo');
-    els.liveText.textContent = 'DEMO • LIVE';
+    els.liveText.textContent = 'PUBLIC • LIVE';
   } else if (mode === 'connecting') {
     els.liveText.textContent = 'CONNECTING';
   } else {
@@ -233,7 +233,9 @@ function renderMeta(state) {
   els.lastUpdated.textContent = `Last updated ${fmtTimeAgo(state.lastUpdated)} • ${fmtFullTime(state.lastUpdated)}`;
   els.lastUpdated.title = new Date(state.lastUpdated).toLocaleString();
 
-  const mode = state.demoMode ? `Demo mode — no private cookie set on server` : (state.live ? `Live — polling Roblox` : `Connecting to Roblox…`);
+  const mode = state.demoMode
+    ? `Public mode — stock is 100% real. Buyer names hidden without private cookie.`
+    : (state.live ? `Live — polling Roblox with cookie` : `Connecting to Roblox…`);
   els.modeLabel.textContent = mode;
 
   els.inventoryHint.textContent = `Live counts update ~every ${Math.round((state.inventoryPollIntervalMs || 30000)/1000)}s`;

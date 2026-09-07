@@ -8,6 +8,8 @@ const els = {
   statSold: document.getElementById('stat-sold'),
   statLeft: document.getElementById('stat-left'),
   statTotal: document.getElementById('stat-total'),
+  revenueNet: document.getElementById('revenue-net'),
+  revenueGross: document.getElementById('revenue-gross'),
   latestEmpty: document.getElementById('latest-empty'),
   latestContent: document.getElementById('latest-content'),
   latestItem: document.getElementById('latest-item'),
@@ -35,6 +37,7 @@ let lastState = null;
 let sse = null;
 let reconnectTimer = null;
 let timeAgoTimer = null;
+let displayedRevenue = null;
 
 function fmtTimeAgo(iso) {
   if (!iso) return '—';
@@ -77,10 +80,37 @@ function setLivePill(mode) {
 }
 
 function renderStats(state) {
-  const { totalSold, copiesLeft, totalCopies } = state.stats || { totalSold: 0, copiesLeft: 0, totalCopies: 0 };
+  const { totalSold, copiesLeft, totalCopies, net, gross } = state.stats || { totalSold: 0, copiesLeft: 0, totalCopies: 0, net: 0, gross: 0 };
   els.statSold.textContent = Number(totalSold).toLocaleString();
   els.statLeft.textContent = Number(copiesLeft).toLocaleString();
   els.statTotal.textContent = Number(totalCopies).toLocaleString();
+  // Revenue — after 30% fee, per-item prices (50 for emote, 95 for others)
+  const netVal = Number(net ?? state.stats?.revenue ?? 0);
+  const grossVal = Number(gross ?? state.stats?.revenueGross ?? 0);
+  if (els.revenueGross) els.revenueGross.textContent = grossVal.toLocaleString();
+  if (els.revenueNet) {
+    if (displayedRevenue === null) {
+      // first paint — no animation
+      displayedRevenue = netVal;
+      els.revenueNet.textContent = netVal.toLocaleString();
+    } else if (displayedRevenue !== netVal) {
+      const from = displayedRevenue;
+      displayedRevenue = netVal;
+      const el = els.revenueNet;
+      const start = performance.now();
+      const duration = 1000;
+      const ease = t => 1 - Math.pow(1 - t, 3);
+      el.classList.add('tick');
+      const step = (now) => {
+        const p = Math.min(1, (now - start) / duration);
+        const v = Math.round(from + (netVal - from) * ease(p));
+        el.textContent = v.toLocaleString();
+        if (p < 1) requestAnimationFrame(step);
+        else { el.classList.remove('tick'); el.textContent = netVal.toLocaleString(); }
+      };
+      requestAnimationFrame(step);
+    }
+  }
 }
 
 function renderLatest(state) {

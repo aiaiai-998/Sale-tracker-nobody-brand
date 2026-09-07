@@ -151,7 +151,7 @@ ROBLOX_COOKIE=<paste private .ROBLOSECURITY here — never commit it>
 | `/api/state` | GET | — | JSON snapshot (no cookie) |
 | `/api/events` | GET | — | SSE stream (`state`, `sale`, `inventory` events) |
 | `/health` | GET | — | `{ ok, demoMode, live, uptime }` |
-| `/api/demo/sale` | POST | — | generate one demo sale (only in demo mode) |
+| `/api/demo/sale` | POST | — | always `403` (disabled) |
 
 ---
 

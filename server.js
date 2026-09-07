@@ -455,34 +455,61 @@ async function pollInventory() {
       }
 
       // Remaining / total logic
-      // If API gives remaining + sales, derive sold/total. If only remaining, keep total from state.
       let remaining = details.remaining;
       let total = details.total;
       let sales = details.sales;
 
-      if (remaining != null && Number.isFinite(Number(remaining))) {
-        remaining = Number(remaining);
-        // If we have sales+remaining, trust that for total
-        if (sales != null && Number.isFinite(Number(sales))) {
-          const s = Number(sales);
-          const t = s + remaining;
-          if (t > 0 && t !== item.totalCopies) { item.totalCopies = t; didUpdate = true; }
-          if (s !== item.copiesSold) { item.copiesSold = s; didUpdate = true; }
-          if (remaining !== item.copiesRemaining) { item.copiesRemaining = remaining; didUpdate = true; }
-        } else {
-          // Only remaining known — infer sold = total - remaining
-          if (remaining !== item.copiesRemaining) { item.copiesRemaining = remaining; didUpdate = true; }
-          const inferredSold = Math.max(0, item.totalCopies - remaining);
-          // Only apply if it moves forward (don't jump backwards due to API lag)
-          if (inferredSold !== item.copiesSold) {
-            // Allow small corrections but prefer monotonic increase; still update if plausible
-            item.copiesSold = inferredSold;
+      // In DEMO mode we keep simulated sold counts so bars move — only sync total/price/name/thumb from Roblox
+      // Otherwise a real 0-sold response would reset the nice 68-73% demo bars to 0% every 30s
+      if (state.demoMode) {
+        if (total != null && Number.isFinite(Number(total))) {
+          const t = Number(total);
+          if (t > 0 && t !== item.totalCopies) {
+            const oldProgress = item.progress || 0;
+            const oldTotal = item.totalCopies;
+            item.totalCopies = t;
+            if (oldProgress > 0) {
+              // preserve visual progress when total jumps (250 -> 2845)
+              const scaled = Math.round(t * oldProgress / 100);
+              // keep scaled but ensure at least a few sold so bar isn't empty
+              item.copiesSold = Math.min(t - 1, Math.max(scaled, Math.floor(t * 0.35)));
+              item.copiesRemaining = Math.max(0, t - item.copiesSold);
+            } else if (item.copiesSold < 10) {
+              // first real inventory after boot and we had 0% — seed 42-70%
+              const seeded = Math.floor(t * (0.42 + Math.random() * 0.28));
+              item.copiesSold = seeded;
+              item.copiesRemaining = t - seeded;
+            } else {
+              item.copiesRemaining = Math.max(0, t - item.copiesSold);
+            }
+            item.progress = Math.round((item.copiesSold / t) * 100);
             didUpdate = true;
           }
+        } else if (remaining != null && Number.isFinite(Number(remaining)) && total == null) {
+          // fallback if only remaining known — keep sold, update remaining if needed
         }
-      } else if (total != null && Number.isFinite(Number(total))) {
-        const t = Number(total);
-        if (t !== item.totalCopies) { item.totalCopies = t; didUpdate = true; }
+      } else {
+        // LIVE mode — trust Roblox numbers exactly
+        if (remaining != null && Number.isFinite(Number(remaining))) {
+          remaining = Number(remaining);
+          if (sales != null && Number.isFinite(Number(sales))) {
+            const s = Number(sales);
+            const t = s + remaining;
+            if (t > 0 && t !== item.totalCopies) { item.totalCopies = t; didUpdate = true; }
+            if (s !== item.copiesSold) { item.copiesSold = s; didUpdate = true; }
+            if (remaining !== item.copiesRemaining) { item.copiesRemaining = remaining; didUpdate = true; }
+          } else {
+            if (remaining !== item.copiesRemaining) { item.copiesRemaining = remaining; didUpdate = true; }
+            const inferredSold = Math.max(0, item.totalCopies - remaining);
+            if (inferredSold !== item.copiesSold) {
+              item.copiesSold = inferredSold;
+              didUpdate = true;
+            }
+          }
+        } else if (total != null && Number.isFinite(Number(total))) {
+          const t = Number(total);
+          if (t !== item.totalCopies) { item.totalCopies = t; didUpdate = true; }
+        }
       }
 
       if (didUpdate) {

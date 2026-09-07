@@ -41,6 +41,7 @@ let sse = null;
 let reconnectTimer = null;
 let timeAgoTimer = null;
 let displayedRevenue = null;
+let lastFlashedSaleId = null;
 
 function fmtTimeAgo(iso) {
   if (!iso) return '—';
@@ -148,7 +149,7 @@ function renderLatest(state) {
 
   els.latestItem.textContent = latest.itemName || `Item ${latest.assetId}`;
   els.latestBuyer.textContent = latest.buyerName || 'Unknown';
-  els.latestPrice.textContent = `${latest.price ?? '?'} Robux`;
+  els.latestPrice.textContent = `${latest.price ?? '?'} Robux${latest.qty > 1 ? ` ×${latest.qty}` : ''}`;
   els.latestTime.textContent = fmtTimeAgo(latest.soldAt);
   els.latestTime.title = new Date(latest.soldAt).toLocaleString();
 
@@ -168,9 +169,12 @@ function renderLatest(state) {
     els.latestThumbPh.classList.remove('hidden');
   }
 
-  // flash
-  els.heroCard.classList.add('flash');
-  setTimeout(() => els.heroCard.classList.remove('flash'), 900);
+  // flash only when the latest sale actually changed (not on every state refresh)
+  if (lastFlashedSaleId !== latest.id) {
+    lastFlashedSaleId = latest.id;
+    els.heroCard.classList.add('flash');
+    setTimeout(() => els.heroCard.classList.remove('flash'), 900);
+  }
 }
 
 function renderItems(state) {
@@ -180,7 +184,12 @@ function renderItems(state) {
     return;
   }
 
-  // Keep existing DOM nodes where possible to allow bar animation
+  // Skip rebuild when nothing visibly changed — avoids thumbnail flicker on the
+  // frequent state refreshes (we now poll fast enough that DOM churn shows).
+  const sig = items.map(it => `${it.assetId}:${it.name}:${it.price}:${it.copiesSold}:${it.copiesRemaining}:${it.progress}:${it.thumbnail || ''}`).join('|');
+  if (els.itemsGrid.dataset.sig === sig) return;
+  els.itemsGrid.dataset.sig = sig;
+
   els.itemsGrid.innerHTML = items.map(it => {
     const pct = Math.max(0, Math.min(100, it.progress ?? 0));
     const sold = Number(it.copiesSold || 0).toLocaleString();
@@ -239,12 +248,13 @@ function renderFeed(state) {
       ? `<img class="feed-thumb" src="${escapeHtml(item.thumbnail)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'" /><div class="feed-thumb-ph" style="display:none">${escapeHtml((item.name || s.itemName || 'NB').slice(0,2).toUpperCase())}</div>`
       : `<div class="feed-thumb-ph">${escapeHtml((s.itemName || 'NB').slice(0,2).toUpperCase())}</div>`;
 
+    const qty = (s.qty && s.qty > 1) ? `<span class="feed-qty">×${s.qty}</span>` : '';
     const time = fmtTimeAgo(s.soldAt);
     return `
       <div class="feed-item ${idx === 0 ? 'latest' : ''}">
         ${thumb}
         <div class="feed-main">
-          <div class="feed-item-name">${escapeHtml(s.itemName || item?.name || `Item ${s.assetId}`)}</div>
+          <div class="feed-item-name">${escapeHtml(s.itemName || item?.name || `Item ${s.assetId}`)}${qty}</div>
           <div class="feed-item-buyer">bought by <strong>${escapeHtml(s.buyerName || 'Unknown')}</strong></div>
         </div>
         <div class="feed-meta">
@@ -255,17 +265,15 @@ function renderFeed(state) {
     `;
   }).join('');
 
-  // Efficiently update if changed
-  if (els.feed.dataset.hash !== String(sales[0]?.id)) {
-    els.feed.dataset.hash = String(sales[0]?.id || '');
+  // Re-render when the newest entries change — including buyer names getting
+  // filled in later ("Someone" upgraded to a real username).
+  const hash = sales.slice(0, 10).map(s => `${s.id}:${s.buyerName}:${s.qty || 1}`).join('|');
+  if (els.feed.dataset.hash !== hash) {
+    els.feed.dataset.hash = hash;
     // Preserve scroll if user scrolled up — only autoscroll if at top
     const atTop = els.feed.scrollTop < 40;
-    els.feed.innerHTML = html + els.feed.innerHTML.includes('feed-empty') ? '' : '';
-    // Re-inject empty but hidden
-    if (!document.getElementById('feed-empty')) {
-      // already handled
-    }
-    // Ensure empty node stays
+    els.feed.innerHTML = html;
+    // Ensure empty node stays in the DOM (hidden)
     if (els.feedEmpty && !els.feed.contains(els.feedEmpty)) {
       els.feed.prepend(els.feedEmpty);
       els.feedEmpty.style.display = 'none';
@@ -279,7 +287,7 @@ function renderMeta(state) {
   els.lastUpdated.title = new Date(state.lastUpdated).toLocaleString();
 
   const mode = state.demoMode
-    ? `Public mode — stock is 100% real. Buyer names hidden without private cookie.`
+    ? `Public mode — stock & sales are 100% real. Buyers show as "Someone" until names are available.`
     : (state.live ? `Live — polling Roblox with cookie` : `Connecting to Roblox…`);
   els.modeLabel.textContent = mode;
 
@@ -339,11 +347,14 @@ function connectSSE() {
   sse.addEventListener('sale', (e) => {
     try {
       const sale = JSON.parse(e.data);
-      // Flash latest even if state hasn't arrived yet
+      if (!sale) return;
+      // Flash latest even if the full state hasn't arrived yet — but never duplicate
       if (lastState) {
+        if (!lastState.sales.some(s => s.id === sale.id)) {
+          lastState.sales.unshift(sale);
+          if (lastState.sales.length > 50) lastState.sales.length = 50;
+        }
         lastState.latestSale = sale;
-        lastState.sales.unshift(sale);
-        if (lastState.sales.length > 50) lastState.sales.length = 50;
         render(lastState);
       }
     } catch {}

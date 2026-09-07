@@ -16,7 +16,7 @@
 - **Latest item sold** hero card at the top (item, buyer, time, Robux — flashes on new sale)
 - **Live sales feed** (right column) — each sale shows item sold, buyer name, relative time, and Robux amount — newest first
 - **Limited stock** cards — one per UGC asset, each with item name, copies sold, total copies, copies remaining, price, and animated progress bar
-- Near-live polling (Roblox has no instant webhooks) — **sales polled every 5–10s, stock every 15–30s**
+- Near-live polling (Roblox has no instant webhooks) — **sales + stock polled every 5–10s, so the feed moves at the same time as the Robux total**
 - Real-time browser updates via **Server-Sent Events (SSE)** — no refresh needed
 - **Transparent background** — looks perfect as an **OBS Browser Source**
 
@@ -25,21 +25,23 @@
 ## How it works
 
 ```
-Roblox Economy API ──poll 7s──>  Node server (server.js) ──SSE /api/events──> Browser overlay
-                   ──poll 30s─>  (inventory: remaining / total / price / thumbnail)
+Roblox Economy API ──poll 7s──>  Node server (server.js) ──SSE /api/events──>  Browser overlay
+                              (stock: remaining / total / price / thumbnail)
 ```
 
-- Backend polls `https://economy.roblox.com/v1/groups/{groupId}/transactions` for group sales (requires cookie) and `economy/v2/assets/{assetId}/details` + `api.roblox.com/marketplace/productinfo` + thumbnails for stock + images.
+- **Sales are detected from stock movement** — every poll of `economy.roblox.com/v2/assets/{assetId}/details` compares `Remaining` against the last poll. When copies sold go up, that exact purchase is pushed into the **Live sales feed** and **Latest item sold** instantly (the same signal that moves the Robux total, so they can never fall out of sync).
+- **Buyer names are attached when a source is available**: group transactions (with the private cookie) and public item owner/instance endpoints (using the correct `collectibleItemId` UUIDs). A sale already logged anonymously as "Someone" is *upgraded in place* — never duplicated.
 - Frontend connects once to `GET /api/events` (SSE) and re-renders on every `state` / `sale` event. Falls back to `GET /api/state` if SSE is buffered.
 - **Cookie never leaves the server** — `ROBLOX_COOKIE` is read only from `process.env` and only sent outbound to Roblox. Frontend never sees it.
+- If Roblox is unreachable or rate-limits us, the server backs off instead of hammering it, and recovers automatically.
 
-### Demo mode
+### Public mode (no cookie)
 
 If `ROBLOX_COOKIE` is missing/empty, the server does **not** crash. It:
-- seeds three items with realistic totals,
-- shows 5 recent fake sales so the overlay isn’t empty,
-- generates a new simulated sale every ~18–35s and nudges stock counts,
-- labels the header pill **DEMO • LIVE** and notes “Near-live polling…”.
+- tracks 100% real stock numbers (remaining / sold / progress bars) from public endpoints,
+- pushes **every real purchase** into the sales feed within seconds of the stock moving,
+- shows buyers as **"Someone"** until a name source is available (a private cookie upgrades them to real usernames),
+- labels the header pill **PUBLIC • LIVE**.
 
 Add the cookie in Render → redeploy → overlay flips to **LIVE** automatically.
 

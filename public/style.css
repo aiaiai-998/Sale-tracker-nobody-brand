@@ -153,8 +153,8 @@ body{
 
 /* Revenue — after-fee Robux clock */
 .revenue-card{
-  display:flex; align-items:center; justify-content:space-between;
-  gap:16px; padding:14px 18px;
+  display:flex; align-items:center; justify-content:center;
+  gap:16px; padding:18px 18px;
 }
 .revenue-left{ min-width:0 }
 .revenue-k{ font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color: var(--faint); font-weight:600 }

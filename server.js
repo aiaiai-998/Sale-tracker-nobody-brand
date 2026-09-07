@@ -173,7 +173,6 @@ async function pollGroupSales() {
     `https://economy.roblox.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
     `https://economy.roblox.com/v1/communities/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
     `https://economy.roproxy.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
-    `https://apis.roblox.com/marketplace-sales/v1/sales?itemId=${UGC_ASSET_IDS[0]}&limit=25`,
   ];
   let lastRes = null;
   let lastUrl = urlsToTry[0];

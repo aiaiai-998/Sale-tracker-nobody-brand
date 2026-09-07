@@ -129,7 +129,26 @@ function robloxHeaders(extra = {}) {
     ...extra,
   };
   if (HAS_COOKIE) h['Cookie'] = `.ROBLOSECURITY=${ROBLOX_COOKIE}`;
+  if (csrfToken) h['X-CSRF-TOKEN'] = csrfToken;
   return h;
+}
+let csrfToken = null;
+let csrfFetchedAt = 0;
+async function ensureCsrfToken() {
+  if (!HAS_COOKIE) return null;
+  if (csrfToken && Date.now() - csrfFetchedAt < 300000) return csrfToken;
+  try {
+    // auth.roblox.com is the canonical CSRF endpoint — POST returns x-csrf-token even on failure
+    const r = await fetch('https://auth.roblox.com/v2/logout', { method: 'POST', headers: robloxHeaders() });
+    const t = r.headers.get('x-csrf-token') || r.headers.get('X-CSRF-TOKEN');
+    if (t) { csrfToken = t; csrfFetchedAt = Date.now(); console.log(`[csrf] got token ${t.slice(0,8)}...`); return t; }
+  } catch (e) { console.warn(`[csrf] logout fetch failed: ${e.message}`); }
+  try {
+    const r2 = await fetch('https://www.roblox.com/home', { headers: robloxHeaders() });
+    const t2 = r2.headers.get('x-csrf-token') || r2.headers.get('X-CSRF-TOKEN');
+    if (t2) { csrfToken = t2; csrfFetchedAt = Date.now(); return t2; }
+  } catch {}
+  return null;
 }
 async function fetchJson(url, opts = {}) {
   const res = await fetch(url, opts);
@@ -149,10 +168,12 @@ async function pollGroupSales() {
     broadcast('state', toPublicState());
     return;
   }
+  await ensureCsrfToken();
   const urlsToTry = [
     `https://economy.roblox.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
     `https://economy.roblox.com/v1/communities/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
     `https://economy.roproxy.com/v1/groups/${GROUP_ID}/transactions?transactionType=Sale&limit=25&cursor=`,
+    `https://apis.roblox.com/marketplace-sales/v1/sales?itemId=${UGC_ASSET_IDS[0]}&limit=25`,
   ];
   let lastRes = null;
   let lastUrl = urlsToTry[0];
@@ -279,6 +300,86 @@ async function fetchThumbnails(assetIds) {
     const r = await fetchJson(url, { headers: robloxHeaders() });
     if (r.ok && r.json && r.json.data) { const map={}; r.json.data.forEach(d=>{ if(d.targetId && d.imageUrl) map[String(d.targetId)]=d.imageUrl; }); return map; }
   } catch {} return {};
+}
+// Public buyer tracking via Limited owners — works WITHOUT cookie, like other UGC trackers do
+const seenOwners = new Map(); // assetId -> Set of owner ids already seen
+async function pollRecentBuyers() {
+  for (const assetId of UGC_ASSET_IDS) {
+    try {
+      // This is the public endpoint other trackers use to show real buyers without a group cookie
+      const url = `https://inventory.roblox.com/v1/assets/${assetId}/owners?sortOrder=Desc&limit=10`;
+      const r = await fetchJson(url, { headers: robloxHeaders() });
+      if (!r.ok || !r.json) {
+        // try alternate: collectible instances
+        const altUrl = `https://apis.roblox.com/marketplace-items/v1/items/item/${assetId}/instances?limit=10&cursor=`;
+        const r2 = await fetchJson(altUrl, { headers: robloxHeaders() });
+        if (!r2.ok || !r2.json) continue;
+        const instances = r2.json.data || r2.json.instances || [];
+        if (!instances.length) continue;
+        if (!seenOwners.has(assetId)) seenOwners.set(assetId, new Set());
+        const seen = seenOwners.get(assetId);
+        let newOnes = [];
+        for (const inst of instances) {
+          const owner = inst.owner || inst.currentOwner || {};
+          const uid = String(owner.id || owner.userId || inst.ownerId || '');
+          if (!uid || seen.has(uid + '-' + (inst.serialNumber || ''))) continue;
+          seen.add(uid + '-' + (inst.serialNumber || ''));
+          newOnes.push({ uid, name: owner.name || owner.username || `User ${uid}`, at: inst.updated || inst.created || new Date().toISOString(), serial: inst.serialNumber });
+        }
+        if (seen.size > 200) { const arr=[...seen]; arr.slice(0,100).forEach(v=>seen.delete(v)); }
+        if (newOnes.length && seen.size > 10) { // after baseline, only new owners count as sales
+          const item = state.items[assetId];
+          for (const o of newOnes.reverse()) {
+            const sale = { id: `owner-${assetId}-${o.uid}-${o.serial}-${Date.now()}`, assetId, itemName: item?.name || `Item ${assetId}`, buyerName: o.name, buyerId: o.uid, price: item?.price ?? 0, currency:'Robux', soldAt: o.at, created: o.at, demo:false, via:'owners' };
+            state.sales.unshift(sale);
+            if (state.sales.length>80) state.sales.length=80;
+            state.latestSale = state.sales[0];
+            console.log(`[owners] ${sale.itemName} new owner ${sale.buyerName} #${o.serial}`);
+          }
+          state.sales.sort((a,b)=> new Date(b.soldAt)-new Date(a.soldAt));
+          state.lastUpdated = new Date().toISOString();
+          broadcast('sale', state.latestSale);
+          broadcast('state', toPublicState());
+        } else if (seen.size <= 10) {
+          // baseline — just remember owners, don't flood feed with history
+          console.log(`[owners] baseline ${assetId}: ${seen.size} owners`);
+        }
+        continue;
+      }
+      const owners = r.json.data || r.json.owners || [];
+      if (!owners.length) continue;
+      if (!seenOwners.has(assetId)) seenOwners.set(assetId, new Set());
+      const seen = seenOwners.get(assetId);
+      let newOnes = [];
+      for (const o of owners) {
+        const uid = String(o.id || o.owner?.id || '');
+        const name = o.name || o.owner?.name || o.username || `User ${uid}`;
+        const serial = o.serialNumber ?? o.instanceId ?? '';
+        const key = uid + '-' + serial;
+        if (!uid || seen.has(key)) continue;
+        seen.add(key);
+        newOnes.push({ uid, name, at: o.updated || o.created || new Date().toISOString(), serial });
+      }
+      if (seen.size > 200) { const arr=[...seen]; arr.slice(0,100).forEach(v=>seen.delete(v)); }
+      if (newOnes.length && seen.size > owners.length) {
+        // only after baseline
+        const item = state.items[assetId];
+        for (const o of newOnes.reverse()) {
+          const sale = { id: `owner-${assetId}-${o.uid}-${Date.now()}`, assetId, itemName: item?.name || `Item ${assetId}`, buyerName: o.name, buyerId: o.uid, price: item?.price ?? 0, currency:'Robux', soldAt: o.at, created: o.at, demo:false, via:'owners' };
+          state.sales.unshift(sale);
+          if (state.sales.length>80) state.sales.length=80;
+          state.latestSale = sale;
+          console.log(`[owners] ${sale.itemName} new owner ${sale.buyerName}`);
+        }
+        state.sales.sort((a,b)=> new Date(b.soldAt)-new Date(a.soldAt));
+        state.lastUpdated = new Date().toISOString();
+        broadcast('state', toPublicState());
+      } else if (seen.size <= owners.length) {
+        console.log(`[owners] baseline ${assetId}: ${owners.length} owners`);
+      }
+    } catch (e) { console.warn(`[owners] ${assetId} failed: ${e.message}`); }
+    await new Promise(r=>setTimeout(r,400));
+  }
 }
 
 async function pollInventory() {
@@ -407,9 +508,10 @@ app.get('*', (req,res)=> res.sendFile(path.join(__dirname,'public','index.html')
 function startLoops(){
   setTimeout(pollGroupSales,1500);
   setTimeout(pollInventory,2500);
+  setTimeout(pollRecentBuyers,4000);
   setInterval(pollGroupSales, POLL_INTERVAL_MS);
   setInterval(pollInventory, INVENTORY_POLL_INTERVAL_MS);
-  // No fake sale intervals in accurate public mode
+  setInterval(pollRecentBuyers, POLL_INTERVAL_MS); // public owners — real buyers without needing spend perm, like other trackers
 }
 app.listen(PORT,'0.0.0.0',()=>{
   console.log(`[http] listening on 0.0.0.0:${PORT}`);

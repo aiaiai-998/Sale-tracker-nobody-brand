@@ -3,7 +3,7 @@
 **Roblox Limited UGC live sales tracker + transparent glass stream overlay**
 
 > Group: **Nobody’s Brand — 201198194**  
-> Tracked assets: `137910150798027` • `129297459934395` • `121581072690400`  
+> Tracked assets: `137910150798027` • `129297459934395` • `121581072690400` • `73175553972885`  
 > OBS-ready — transparent background, glassmorphism, auto-updates without refresh.
 
 ![overlay preview](https://via.placeholder.com/1280x720/0a0a0f/ffffff?text=Nobody%27s+Brand+Live+Overlay)
@@ -75,7 +75,7 @@ npm start
 | Var | Required | Default | Notes |
 |-----|----------|---------|-------|
 | `ROBLOX_GROUP_ID` | no | `201198194` | Nobody’s Brand |
-| `UGC_ASSET_IDS` | no | `137910150798027,129297459934395,121581072690400` | comma-separated asset IDs |
+| `UGC_ASSET_IDS` | no | `137910150798027,129297459934395,121581072690400,73175553972885` | comma-separated asset IDs |
 | `POLL_INTERVAL_MS` | no | `7000` | clamped 5000–10000 |
 | `INVENTORY_POLL_INTERVAL_MS` | no | `30000` | clamped 15000–30000 |
 | `ROBLOX_COOKIE` | no | *(empty → demo)* | **private** `.ROBLOSECURITY` — only on server |
@@ -137,7 +137,7 @@ This repo is ready for [Render](https://render.com) free hosting:
 
 ```
 ROBLOX_GROUP_ID=201198194
-UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400
+UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400,73175553972885
 POLL_INTERVAL_MS=7000
 INVENTORY_POLL_INTERVAL_MS=30000
 ROBLOX_COOKIE=<paste private .ROBLOSECURITY here — never commit it>

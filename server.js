@@ -4,7 +4,7 @@
  * Group: 201198194
  * Env:
  *   ROBLOX_GROUP_ID=201198194
- *   UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400
+ *   UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400,73175553972885
  *   POLL_INTERVAL_MS=7000
  *   INVENTORY_POLL_INTERVAL_MS=30000
  *   ROBLOX_COOKIE=private .ROBLOSECURITY (never exposed to browser)
@@ -20,7 +20,7 @@ const path = require('path');
 // ---------------------------------------------------------------------------
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const GROUP_ID = process.env.ROBLOX_GROUP_ID || '201198194';
-const UGC_ASSET_IDS = (process.env.UGC_ASSET_IDS || '137910150798027,129297459934395,121581072690400')
+const UGC_ASSET_IDS = (process.env.UGC_ASSET_IDS || '137910150798027,129297459934395,121581072690400,73175553972885')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
@@ -39,8 +39,19 @@ const KNOWN_COLLECTIBLE_IDS = {
   '137910150798027': '7841aa19-9999-4081-8825-6da41b4f6b86', // FIery Horns
   '129297459934395': '2378fc2a-8eee-4574-aec8-8f254a7f838e', // [⏳LIMITED] Fake Dead MM2 Emote
   '121581072690400': 'eada40b1-0dcc-4cfc-96b4-40ad2afb00d1', // Clockwork Shades
+  '73175553972885': '0338eb7d-c028-4900-9f0e-9acdd6364fea', // Blue Valk
 };
 const collectibleItemIds = { ...KNOWN_COLLECTIBLE_IDS };
+
+// Creator-confirmed supply per asset. Used as the boot value and as a fallback
+// when the API doesn't report a total — add a new item here with its copy count.
+const KNOWN_TOTALS = {
+  '137910150798027': 3000, // FIery Horns
+  '129297459934395': 3000, // [⏳LIMITED] Fake Dead MM2 Emote
+  '121581072690400': 3000, // Clockwork Shades
+  '73175553972885': 3000, // Blue Valk
+};
+const DEFAULT_TOTAL_COPIES = 200;
 
 console.log(`[boot] Nobody's Brand Live Sales`);
 console.log(`[boot] Group: ${GROUP_ID} | Assets: ${UGC_ASSET_IDS.join(', ')}`);
@@ -71,15 +82,16 @@ let state = {
 };
 
 UGC_ASSET_IDS.forEach(id => {
+  const bootTotal = KNOWN_TOTALS[id] || DEFAULT_TOTAL_COPIES;
   state.items[id] = {
     assetId: id,
     name: `Limited #${id.slice(-6)}`,
     description: '',
     price: 85,
-    totalCopies: 200,
+    totalCopies: bootTotal,
     copiesSold: 0,
-    copiesRemaining: 200,
-    remaining: 200,
+    copiesRemaining: bootTotal,
+    remaining: bootTotal,
     sales: 0,
     thumbnail: '',
     progress: 0,
@@ -88,6 +100,9 @@ UGC_ASSET_IDS.forEach(id => {
     updatedAt: new Date().toISOString(),
   };
 });
+// Seed the header stats from the configured supply so the overlay shows the real
+// totals immediately instead of 0 until the first successful poll lands.
+recalcStats();
 // No fake seeded sales — accurate mode starts empty until Roblox says otherwise
 // No demo sold numbers — will be overwritten by first real inventory poll in ~2.5s
 
@@ -646,9 +661,6 @@ async function pollInventory() {
 
       let remaining = details.remaining; let total = details.total; let sales = details.sales;
       const prevTotal = item.totalCopies;
-
-      // Creator-confirmed totals as a fallback if the API doesn't report one
-      const KNOWN_TOTALS = { '137910150798027': 3000, '129297459934395': 3000, '121581072690400': 3000 };
 
       if (remaining != null && Number.isFinite(Number(remaining))) {
         remaining = Number(remaining);

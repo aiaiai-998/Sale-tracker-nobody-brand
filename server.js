@@ -42,6 +42,15 @@ const KNOWN_COLLECTIBLE_IDS = {
 };
 const collectibleItemIds = { ...KNOWN_COLLECTIBLE_IDS };
 
+// Creator-confirmed supply per asset. Used as the boot value and as a fallback
+// when the API doesn't report a total — add a new item here with its copy count.
+const KNOWN_TOTALS = {
+  '137910150798027': 3000, // FIery Horns
+  '129297459934395': 3000, // [⏳LIMITED] Fake Dead MM2 Emote
+  '121581072690400': 3000, // Clockwork Shades
+};
+const DEFAULT_TOTAL_COPIES = 200;
+
 console.log(`[boot] Nobody's Brand Live Sales`);
 console.log(`[boot] Group: ${GROUP_ID} | Assets: ${UGC_ASSET_IDS.join(', ')}`);
 console.log(`[boot] poll: ${POLL_INTERVAL_MS}ms | stock+sales: ${STOCK_POLL_MS}ms`);
@@ -71,15 +80,16 @@ let state = {
 };
 
 UGC_ASSET_IDS.forEach(id => {
+  const bootTotal = KNOWN_TOTALS[id] || DEFAULT_TOTAL_COPIES;
   state.items[id] = {
     assetId: id,
     name: `Limited #${id.slice(-6)}`,
     description: '',
     price: 85,
-    totalCopies: 200,
+    totalCopies: bootTotal,
     copiesSold: 0,
-    copiesRemaining: 200,
-    remaining: 200,
+    copiesRemaining: bootTotal,
+    remaining: bootTotal,
     sales: 0,
     thumbnail: '',
     progress: 0,
@@ -646,9 +656,6 @@ async function pollInventory() {
 
       let remaining = details.remaining; let total = details.total; let sales = details.sales;
       const prevTotal = item.totalCopies;
-
-      // Creator-confirmed totals as a fallback if the API doesn't report one
-      const KNOWN_TOTALS = { '137910150798027': 3000, '129297459934395': 3000, '121581072690400': 3000 };
 
       if (remaining != null && Number.isFinite(Number(remaining))) {
         remaining = Number(remaining);

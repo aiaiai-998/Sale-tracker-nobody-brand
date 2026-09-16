@@ -4,6 +4,16 @@
 
 import { createSaleObserver, createSaleSound } from './sale-sound.mjs';
 
+// Short labels for the header revenue leaderboard, keyed by asset id.
+// Known items keep their friendly names; any extra tracked item (slot 4) falls
+// back to a shortened version of its Roblox name, so adding an item needs no
+// frontend edit — just add its asset id to UGC_ASSET_IDS on the server.
+const BOARD_LABELS = {
+  '137910150798027': 'Fiery',
+  '129297459934395': 'Emote',
+  '121581072690400': 'Shade',
+};
+
 const els = {
   livePill: document.getElementById('live-pill'),
   liveText: document.getElementById('live-text'),
@@ -15,6 +25,9 @@ const els = {
   boardFiery: document.getElementById('board-fiery'),
   boardEmote: document.getElementById('board-emote'),
   boardClock: document.getElementById('board-clock'),
+  boardNew: document.getElementById('board-new'),
+  boardNewSlot: document.getElementById('board-new-slot'),
+  boardNewSep: document.getElementById('board-new-sep'),
   latestEmpty: document.getElementById('latest-empty'),
   latestContent: document.getElementById('latest-content'),
   latestItem: document.getElementById('latest-item'),
@@ -137,13 +150,33 @@ function renderStats(state) {
   try {
     const items = state.items || [];
     const find = (id) => items.find(i => String(i.assetId) === id);
-    const fiery = find('137910150798027');
-    const emote = find('129297459934395');
-    const shade = find('121581072690400');
     const fmt = (it) => it ? (Math.floor((Number(it.price)||0)*0.3) * (it.copiesSold||0)).toLocaleString() : '0';
-    if (els.boardFiery) els.boardFiery.textContent = `Fiery ${fmt(fiery)}`;
-    if (els.boardEmote) els.boardEmote.textContent = `Emote ${fmt(emote)}`;
-    if (els.boardClock) els.boardClock.textContent = `Shade ${fmt(shade)}`;
+    // Known items first (stable order), then anything newly added.
+    const knownIds = Object.keys(BOARD_LABELS);
+    const ordered = knownIds.map(find).filter(Boolean).concat(items.filter(i => !knownIds.includes(String(i.assetId))));
+    const shortName = (it, fallback) => {
+      const raw = String(it?.name || '').replace(/\[[^\]]*\]/g, '').trim();
+      const word = (raw.split(/\s+/)[0] || '').replace(/[^a-zA-Z0-9]/g, '');
+      return word ? word.slice(0, 9) : fallback;
+    };
+    const slots = [
+      { el: els.boardFiery, label: BOARD_LABELS[knownIds[0]] },
+      { el: els.boardEmote, label: BOARD_LABELS[knownIds[1]] },
+      { el: els.boardClock, label: BOARD_LABELS[knownIds[2]] },
+    ];
+    slots.forEach((slot, idx) => {
+      if (!slot.el) return;
+      slot.el.textContent = `${slot.label} ${fmt(ordered[idx])}`;
+    });
+    // Slot 4 = the newest added item (auto-labelled from its Roblox name).
+    const extra = ordered[3];
+    if (els.boardNew) {
+      els.boardNew.textContent = `${extra ? (BOARD_LABELS[String(extra.assetId)] || shortName(extra, 'New')) : 'New'} ${fmt(extra)}`;
+    }
+    // Slot 4 only takes space when a 4th item is actually being tracked.
+    const hasExtra = Boolean(ordered[3]);
+    if (els.boardNewSlot) els.boardNewSlot.classList.toggle('hidden', !hasExtra);
+    if (els.boardNewSep) els.boardNewSep.classList.toggle('hidden', !hasExtra);
   } catch {}
   if (els.revenueNet) {
     if (displayedRevenue === null) {

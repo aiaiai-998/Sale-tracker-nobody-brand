@@ -5,14 +5,15 @@
 import { createSaleObserver, createSaleSound } from './sale-sound.mjs';
 
 // Short labels for the header revenue leaderboard, keyed by asset id.
-// Known items keep their friendly names; any extra tracked item (slot 4) falls
-// back to a shortened version of its Roblox name, so adding an item needs no
-// frontend edit — just add its asset id to UGC_ASSET_IDS on the server.
+// Known items keep their friendly names; a 4th tracked item (if one is ever
+// added) falls back to a shortened version of its Roblox name, so adding an
+// item needs no frontend edit — just add its asset id to UGC_ASSET_IDS on the
+// server. The deleted Blue Valk (73175553972885) is no longer tracked, so slot
+// 4 stays hidden and the header total is 9,000 copies, not 12,000.
 const BOARD_LABELS = {
   '137910150798027': 'Fiery',
   '129297459934395': 'Emote',
   '121581072690400': 'Shade',
-  '73175553972885': 'Valk',
 };
 
 const els = {
@@ -374,7 +375,25 @@ function renderMeta(state) {
   else setLivePill('connecting');
 }
 
+// Deleted / pulled items (the server lists them as retiredAssetIds). The server
+// already stops tracking them, this just guarantees a retired item can never be
+// rendered from a stale snapshot or a late SSE sale event.
+function pruneRetired(state) {
+  const retired = new Set((state?.retiredAssetIds || []).map(String));
+  if (!state || !retired.size) return state;
+  const items = (state.items || []).filter(it => !retired.has(String(it.assetId)));
+  const sales = (state.sales || []).filter(s => !retired.has(String(s.assetId)));
+  const latestSale = state.latestSale && retired.has(String(state.latestSale.assetId))
+    ? (sales[0] || null)
+    : state.latestSale;
+  if (items.length === (state.items || []).length &&
+      sales.length === (state.sales || []).length &&
+      latestSale === state.latestSale) return state;
+  return { ...state, items, sales, latestSale };
+}
+
 function render(state) {
+  state = pruneRetired(state);
   // Observe snapshots from both SSE and fallback polling, even while muted.
   // Never use revenue changes or render animations as a sale notification.
   observeSales(state);

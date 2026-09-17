@@ -4,7 +4,7 @@
  * Group: 201198194
  * Env:
  *   ROBLOX_GROUP_ID=201198194
- *   UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400,73175553972885
+ *   UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400
  *   POLL_INTERVAL_MS=7000
  *   INVENTORY_POLL_INTERVAL_MS=30000
  *   ROBLOX_COOKIE=private .ROBLOSECURITY (never exposed to browser)
@@ -20,10 +20,19 @@ const path = require('path');
 // ---------------------------------------------------------------------------
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const GROUP_ID = process.env.ROBLOX_GROUP_ID || '201198194';
-const UGC_ASSET_IDS = (process.env.UGC_ASSET_IDS || '137910150798027,129297459934395,121581072690400,73175553972885')
+// Items deleted / pulled from Roblox. They are filtered out of the tracked list
+// HERE, so a stale UGC_ASSET_IDS value on the deploy (Render dashboard, old .env)
+// can never bring a dead item back onto the overlay, its copies into the header
+// totals, or its Robux into the revenue counter.
+const RETIRED_ASSET_IDS = new Set([
+  '73175553972885', // Blue Valk — deleted on Roblox (showed up as "Limited #972885")
+]);
+const CONFIGURED_ASSET_IDS = (process.env.UGC_ASSET_IDS || '137910150798027,129297459934395,121581072690400')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+const DROPPED_ASSET_IDS = CONFIGURED_ASSET_IDS.filter(id => RETIRED_ASSET_IDS.has(id));
+const UGC_ASSET_IDS = CONFIGURED_ASSET_IDS.filter(id => !RETIRED_ASSET_IDS.has(id));
 const POLL_INTERVAL_MS = Math.max(5000, Math.min(10000, parseInt(process.env.POLL_INTERVAL_MS || '7000', 10)));
 const INVENTORY_POLL_INTERVAL_MS = Math.max(15000, Math.min(30000, parseInt(process.env.INVENTORY_POLL_INTERVAL_MS || '30000', 10)));
 // Stock counts ARE the sales feed now (a drop in "Remaining" = a real purchase),
@@ -39,22 +48,25 @@ const KNOWN_COLLECTIBLE_IDS = {
   '137910150798027': '7841aa19-9999-4081-8825-6da41b4f6b86', // FIery Horns
   '129297459934395': '2378fc2a-8eee-4574-aec8-8f254a7f838e', // [⏳LIMITED] Fake Dead MM2 Emote
   '121581072690400': 'eada40b1-0dcc-4cfc-96b4-40ad2afb00d1', // Clockwork Shades
-  '73175553972885': '0338eb7d-c028-4900-9f0e-9acdd6364fea', // Blue Valk
 };
 const collectibleItemIds = { ...KNOWN_COLLECTIBLE_IDS };
 
 // Creator-confirmed supply per asset. Used as the boot value and as a fallback
 // when the API doesn't report a total — add a new item here with its copy count.
+// 3 items x 3,000 = 9,000 total copies in the header (the deleted Blue Valk and
+// its 3,000 copies are gone — see RETIRED_ASSET_IDS).
 const KNOWN_TOTALS = {
   '137910150798027': 3000, // FIery Horns
   '129297459934395': 3000, // [⏳LIMITED] Fake Dead MM2 Emote
   '121581072690400': 3000, // Clockwork Shades
-  '73175553972885': 3000, // Blue Valk
 };
 const DEFAULT_TOTAL_COPIES = 200;
 
 console.log(`[boot] Nobody's Brand Live Sales`);
 console.log(`[boot] Group: ${GROUP_ID} | Assets: ${UGC_ASSET_IDS.join(', ')}`);
+if (DROPPED_ASSET_IDS.length) {
+  console.log(`[boot] retired/deleted asset(s) ignored from UGC_ASSET_IDS: ${DROPPED_ASSET_IDS.join(', ')} — no copies, no Robux counted`);
+}
 console.log(`[boot] poll: ${POLL_INTERVAL_MS}ms | stock+sales: ${STOCK_POLL_MS}ms`);
 console.log(`[boot] cookie: ${HAS_COOKIE ? 'present (private, server-only)' : 'MISSING — accurate public mode (no fake sales)'}`);
 
@@ -121,6 +133,10 @@ function toPublicState() {
   return {
     groupId: state.groupId,
     groupUrl: state.groupUrl,
+    assetIds: UGC_ASSET_IDS,
+    // Deleted/pulled items — the overlay drops anything with these ids so a
+    // retired item can never reappear in the feed, the board, or the totals.
+    retiredAssetIds: [...RETIRED_ASSET_IDS],
     demoMode: state.demoMode,
     live: state.live,
     lastUpdated: state.lastUpdated,
@@ -207,7 +223,10 @@ const seenTxIds = new Set();
 const pendingAttribution = new Map(); // assetId -> [saleId, ...] anonymous sales waiting for a buyer name
 
 function addSale(sale) {
-  if (!sale || state.sales.some(s => s.id === sale.id)) return false;
+  if (!sale) return false;
+  // A deleted/retired item must never re-enter the feed or its Robux.
+  if (RETIRED_ASSET_IDS.has(String(sale.assetId))) return false;
+  if (state.sales.some(s => s.id === sale.id)) return false;
   state.sales.unshift(sale);
   if (state.sales.length > 80) state.sales.length = 80;
   registerFeedSale(sale.assetId, sale.qty || 1);
@@ -367,8 +386,21 @@ async function pollGroupSales() {
       const detailId = String(tx.details?.id || tx.details?.assetId || tx.assetId || '');
       seenTxIds.add(txId);
       if (seenTxIds.size > 500) { const arr=[...seenTxIds]; arr.slice(0,250).forEach(id=>seenTxIds.delete(id)); }
-      const assetId = UGC_ASSET_IDS.includes(detailId) ? detailId : (tx.assetId ? String(tx.assetId) : UGC_ASSET_IDS[0]);
-      const item = state.items[assetId] || state.items[UGC_ASSET_IDS[0]];
+      // Only tracked assets count. Anything else — a deleted item like the old
+      // Blue Valk, or some other group asset — is skipped instead of being
+      // credited to the first slot, which used to add Robux the overlay can't
+      // attribute to a live item card.
+      const fallbackId = tx.assetId != null ? String(tx.assetId) : '';
+      const assetId = UGC_ASSET_IDS.includes(detailId)
+        ? detailId
+        : (UGC_ASSET_IDS.includes(fallbackId) ? fallbackId : null);
+      if (!assetId) {
+        if (RETIRED_ASSET_IDS.has(detailId) || RETIRED_ASSET_IDS.has(fallbackId)) {
+          console.log(`[poll:sales] skipped transaction for retired/deleted asset ${detailId || fallbackId}`);
+        }
+        continue;
+      }
+      const item = state.items[assetId];
       const sale = {
         id: txId,
         assetId,

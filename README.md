@@ -3,7 +3,7 @@
 **Roblox Limited UGC live sales tracker + transparent glass stream overlay**
 
 > Group: **Nobody’s Brand — 201198194**  
-> Tracked assets: `137910150798027` • `129297459934395` • `121581072690400` • `73175553972885`  
+> Tracked assets: `137910150798027` • `129297459934395` • `121581072690400`  
 > OBS-ready — transparent background, glassmorphism, auto-updates without refresh.
 
 ![overlay preview](https://via.placeholder.com/1280x720/0a0a0f/ffffff?text=Nobody%27s+Brand+Live+Overlay)
@@ -48,6 +48,17 @@ Add the cookie in Render → redeploy → overlay flips to **LIVE** automaticall
 
 > **Important:** Roblox does not offer zero-delay webhooks for group sales. This project is **near-live** via fast polling, not truly instant. The README and UI never claim otherwise.
 
+### Removed / deleted items
+
+The **Blue Valk** (`73175553972885`) was deleted on Roblox — while it was still listed the overlay could not read a name for it, so it showed up as **Limited #972885**. It is no longer tracked:
+
+- `RETIRED_ASSET_IDS` in `server.js` strips it out of `UGC_ASSET_IDS` at boot, so a stale env value on Render (or an old local `.env`) cannot bring it back.
+- Its 3,000 copies are gone from the header: **Total copies 12,000 → 9,000** (and *Copies left* drops by the same amount).
+- Its Robux is excluded from the revenue counter and its sales from the feed. A group transaction for a retired or untracked asset is now **skipped** instead of being credited to the first tracked item.
+- With three items tracked, the 4th leaderboard slot hides itself automatically.
+
+To retire another deleted item later: add its asset id to `RETIRED_ASSET_IDS`, and remove it from `KNOWN_TOTALS` / `KNOWN_COLLECTIBLE_IDS` and `UGC_ASSET_IDS`.
+
 ---
 
 ## Run locally
@@ -75,7 +86,7 @@ npm start
 | Var | Required | Default | Notes |
 |-----|----------|---------|-------|
 | `ROBLOX_GROUP_ID` | no | `201198194` | Nobody’s Brand |
-| `UGC_ASSET_IDS` | no | `137910150798027,129297459934395,121581072690400,73175553972885` | comma-separated asset IDs |
+| `UGC_ASSET_IDS` | no | `137910150798027,129297459934395,121581072690400` | comma-separated asset IDs — ids in `RETIRED_ASSET_IDS` are dropped (see [Removed / deleted items](#removed--deleted-items)) |
 | `POLL_INTERVAL_MS` | no | `7000` | clamped 5000–10000 |
 | `INVENTORY_POLL_INTERVAL_MS` | no | `30000` | clamped 15000–30000 |
 | `ROBLOX_COOKIE` | no | *(empty → demo)* | **private** `.ROBLOSECURITY` — only on server |
@@ -115,7 +126,7 @@ In the **Live sales feed**, turn **Sale sound** on to hear a short, cash-registe
 npm test
 ```
 
-The dependency-free tests cover new-sale detection, duplicate suppression, bulk quantities, saved preferences, muting, audio queueing, autoplay restrictions, and audio/storage failures.
+The dependency-free tests cover new-sale detection, duplicate suppression, bulk quantities, saved preferences, muting, audio queueing, autoplay restrictions, audio/storage failures, and **retired items** (a deleted asset is never tracked, counted in the copy total, or credited with Robux — even when an old `UGC_ASSET_IDS` value still lists it).
 
 ---
 
@@ -137,7 +148,7 @@ This repo is ready for [Render](https://render.com) free hosting:
 
 ```
 ROBLOX_GROUP_ID=201198194
-UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400,73175553972885
+UGC_ASSET_IDS=137910150798027,129297459934395,121581072690400
 POLL_INTERVAL_MS=7000
 INVENTORY_POLL_INTERVAL_MS=30000
 ROBLOX_COOKIE=<paste private .ROBLOSECURITY here — never commit it>
@@ -163,7 +174,8 @@ ROBLOX_COOKIE=<paste private .ROBLOSECURITY here — never commit it>
 │   ├── script.js          # SSE client, no refresh + sound controls
 │   └── sale-sound.mjs     # local cha-ching synthesis + deduplicated notifications
 ├── test/
-│   └── sale-sound.test.mjs # notification and audio behavior tests
+│   ├── sale-sound.test.mjs   # notification and audio behavior tests
+│   └── retired-assets.test.mjs # deleted items stay off the overlay + out of the totals
 └── README.md
 ```
 

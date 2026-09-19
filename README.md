@@ -15,7 +15,8 @@
 - Header: **“Nobody’s Brand Limited UGC Live”** with live pill, link to the group, and global stats **All copies sold so far / Copies left / Total copies**
 - **Latest item sold** hero card at the top (item, buyer, time, Robux — flashes on new sale)
 - **Live sales feed** (right column) — each sale shows item sold, buyer name, relative time, and Robux amount — newest first
-- **Limited stock** cards — one per UGC asset, each with item name, copies sold, total copies, copies remaining, price, and animated progress bar
+- **Limited stock** cards — one per *still available* UGC asset, each with item name, copies sold, total copies, copies remaining, price, and animated progress bar
+- **Sold out items** section — anything that hits 0 copies left (like the sold-out MM2 Emote) drops out of Limited stock and slides down into its own section below, badged **SOLD OUT** — copies sold, revenue and feed history still count it
 - Near-live polling (Roblox has no instant webhooks) — **sales + stock polled every 5–10s, so the feed moves at the same time as the Robux total**
 - Real-time browser updates via **Server-Sent Events (SSE)** — no refresh needed
 - Optional **Shopify-style cha-ching sale sound** with a remembered **On / Off** switch and **Test sound** button
@@ -47,6 +48,17 @@ If `ROBLOX_COOKIE` is missing/empty, the server does **not** crash. It:
 Add the cookie in Render → redeploy → overlay flips to **LIVE** automatically.
 
 > **Important:** Roblox does not offer zero-delay webhooks for group sales. This project is **near-live** via fast polling, not truly instant. The README and UI never claim otherwise.
+
+### Sold out items
+
+An item that sells out is **not** deleted or hidden — it moves down:
+
+- As soon as an item reports **0 copies left** (`copiesRemaining` / `remaining` hits 0), the next update takes its card out of the **Limited stock** grid and renders it in the **Sold out items** section underneath, with a **SOLD OUT** badge, a greyed-out thumbnail and a full, grey progress bar.
+- The section header shows the summary (`1 item • 3,000 copies sold`) and the section is **hidden entirely** while every tracked item still has stock — no empty panel on your OBS scene.
+- **Totals don't change:** sold-out copies still count in *All copies sold so far* / *Total copies*, in the per-item Robux leaderboard, in the sales feed, and in the *Latest item sold* hero. Only the placement moves.
+- If a creator restocks or supply is raised, the item goes straight back up into **Limited stock** on the next poll.
+- Copies left that the server has **not reported yet** (boot state, a failed poll) are never treated as 0, so a live item can't be dumped into the sold-out section by a missed poll.
+- Split logic lives in `public/item-sections.mjs` (`splitItemsByStock`, `isSoldOut`, `soldOutHint`, `itemCardHTML`) — dependency-free and unit-tested, so the "where does this card go" rule is testable without a browser.
 
 ### Removed / deleted items
 
@@ -126,7 +138,7 @@ In the **Live sales feed**, turn **Sale sound** on to hear a short, cash-registe
 npm test
 ```
 
-The dependency-free tests cover new-sale detection, duplicate suppression, bulk quantities, saved preferences, muting, audio queueing, autoplay restrictions, audio/storage failures, and **retired items** (a deleted asset is never tracked, counted in the copy total, or credited with Robux — even when an old `UGC_ASSET_IDS` value still lists it).
+The dependency-free tests cover new-sale detection, duplicate suppression, bulk quantities, saved preferences, muting, audio queueing, autoplay restrictions, audio/storage failures, **retired items** (a deleted asset is never tracked, counted in the copy total, or credited with Robux — even when an old `UGC_ASSET_IDS` value still lists it), and **sold-out items** (a 0-copies-left item leaves the Limited stock grid for the Sold out items section, unknown stock never counts as sold out, and the sold-out card markup is badged and escaped).
 
 ---
 
@@ -169,13 +181,15 @@ ROBLOX_COOKIE=<paste private .ROBLOSECURITY here — never commit it>
 ├── render.yaml            # Render blueprint (free plan)
 ├── .env.example           # copy to .env locally
 ├── public/
-│   ├── index.html         # transparent glass overlay
+│   ├── index.html         # transparent glass overlay (Limited stock + Sold out items)
 │   ├── style.css          # glassmorphism + OBS-friendly
 │   ├── script.js          # SSE client, no refresh + sound controls
-│   └── sale-sound.mjs     # local cha-ching synthesis + deduplicated notifications
+│   ├── sale-sound.mjs     # local cha-ching synthesis + deduplicated notifications
+│   └── item-sections.mjs  # stock split: Limited stock vs Sold out items (+ card HTML)
 ├── test/
 │   ├── sale-sound.test.mjs   # notification and audio behavior tests
-│   └── retired-assets.test.mjs # deleted items stay off the overlay + out of the totals
+│   ├── retired-assets.test.mjs # deleted items stay off the overlay + out of the totals
+│   └── sold-out-items.test.mjs # sold-out items move to their own section, totals intact
 └── README.md
 ```
 

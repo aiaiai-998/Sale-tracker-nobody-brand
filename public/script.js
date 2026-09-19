@@ -3,6 +3,7 @@
 // No Roblox cookie here — ever.
 
 import { createSaleObserver, createSaleSound } from './sale-sound.mjs';
+import { escapeHtml, itemCardHTML, soldOutHint, splitItemsByStock } from './item-sections.mjs';
 
 // Short labels for the header revenue leaderboard, keyed by asset id.
 // Known items keep their friendly names; a 4th tracked item (if one is ever
@@ -42,6 +43,9 @@ const els = {
   heroCard: document.getElementById('hero-card'),
   heroFlash: document.getElementById('hero-flash'),
   itemsGrid: document.getElementById('items-grid'),
+  soldoutPanel: document.getElementById('soldout-panel'),
+  soldoutGrid: document.getElementById('soldout-grid'),
+  soldoutHint: document.getElementById('soldout-hint'),
   feed: document.getElementById('feed'),
   feedEmpty: document.getElementById('feed-empty'),
   feedCount: document.getElementById('feed-count'),
@@ -117,10 +121,6 @@ function fmtFullTime(iso) {
     const d = new Date(iso);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch { return '—'; }
-}
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 function setLivePill(mode) {
@@ -255,54 +255,35 @@ function renderLatest(state) {
 
 function renderItems(state) {
   const items = state.items || [];
-  if (!items.length) {
-    els.itemsGrid.innerHTML = `<div class="item-card"><div class="item-main"><div class="item-name">No items</div></div></div>`;
-    return;
-  }
+  const { inStock, soldOut } = splitItemsByStock(items);
 
   // Skip rebuild when nothing visibly changed — avoids thumbnail flicker on the
   // frequent state refreshes (we now poll fast enough that DOM churn shows).
+  // The signature covers the split too: when an item hits 0 copies left it moves
+  // down into the sold-out section on the very next update.
   const sig = items.map(it => `${it.assetId}:${it.name}:${it.price}:${it.copiesSold}:${it.copiesRemaining}:${it.progress}:${it.thumbnail || ''}`).join('|');
   if (els.itemsGrid.dataset.sig === sig) return;
   els.itemsGrid.dataset.sig = sig;
 
-  els.itemsGrid.innerHTML = items.map(it => {
-    const pct = Math.max(0, Math.min(100, it.progress ?? 0));
-    const sold = Number(it.copiesSold || 0).toLocaleString();
-    const total = Number(it.totalCopies || 0).toLocaleString();
-    const left = Number(it.copiesRemaining ?? it.remaining ?? 0).toLocaleString();
-    const isSoldOut = (it.copiesRemaining ?? it.remaining) === 0;
-    const thumb = it.thumbnail
-      ? `<img class="item-thumb" src="${escapeHtml(it.thumbnail)}" alt="${escapeHtml(it.name)}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='grid'" /><div class="item-thumb-ph" style="display:none">${escapeHtml(it.name.slice(0,2).toUpperCase())}</div>`
-      : `<div class="item-thumb-ph">${escapeHtml(it.name.slice(0,2).toUpperCase())}</div>`;
+  // Limited stock — only items that still have copies left.
+  els.itemsGrid.innerHTML = inStock.length
+    ? inStock.map(it => itemCardHTML(it, false)).join('')
+    : `<div class="items-empty">
+         <span class="items-empty-title">${items.length ? 'Everything is sold out' : 'No items'}</span>
+         ${items.length ? `<span class="items-empty-sub">Every tracked item has sold out — see below.</span>` : ``}
+       </div>`;
 
-    return `
-      <div class="item-card ${isSoldOut ? 'soldout' : ''}">
-        ${thumb}
-        <div class="item-main">
-          <div class="item-top">
-            <div class="item-name">${escapeHtml(it.name)}</div>
-            <div class="item-price">${escapeHtml(it.price ?? '?')} R$</div>
-          </div>
-          <div class="item-stats">
-            <span><strong>${sold}</strong> sold</span>
-            <span><strong>${left}</strong> left</span>
-            <span><strong>${total}</strong> total</span>
-          </div>
-          <div class="item-bar" aria-label="progress ${pct}%">
-            <div class="item-bar-fill" style="width:${pct}%"></div>
-          </div>
-          <div class="item-foot">
-            <span class="item-dot"></span>
-            <span>${pct}% sold</span>
-            <span class="dot-sep">•</span>
-            <span>ID ${escapeHtml(it.assetId)}</span>
-            ${isSoldOut ? `<span class="dot-sep">•</span><span style="color:#fff;font-weight:700">SOLD OUT</span>` : ``}
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
+  // Sold out — moved down into their own section, still counted in the header.
+  const showSoldOut = soldOut.length > 0;
+  if (els.soldoutPanel) els.soldoutPanel.classList.toggle('hidden', !showSoldOut);
+  if (els.soldoutGrid) {
+    els.soldoutGrid.innerHTML = showSoldOut ? soldOut.map(it => itemCardHTML(it, true)).join('') : '';
+  }
+  if (els.soldoutHint) {
+    els.soldoutHint.textContent = showSoldOut
+      ? soldOutHint(soldOut.length, soldOut.reduce((s, it) => s + (Number(it.copiesSold) || 0), 0))
+      : '';
+  }
 }
 
 function renderFeed(state) {
